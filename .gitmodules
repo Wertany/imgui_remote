@@ -1,0 +1,3 @@
+[submodule "external/imgui-ws"]
+	path = external/imgui-ws
+	url = https://github.com/ggerganov/imgui-ws

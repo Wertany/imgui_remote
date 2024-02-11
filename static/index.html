@@ -1,0 +1,83 @@
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+        <title>demo</title>
+
+        <script src="incppect.js"></script>
+        <script src="imgui-ws.js"></script>
+
+        <style>
+            body {
+                overflow-y: hidden;
+                overflow-x: hidden;
+                margin: 0;
+                background-repeat:no-repeat;
+                background-position: center center;
+                background-color: #FFFFFF;
+                background-attachment: fixed;
+                background-position: center;
+                background-repeat: no-repeat;
+                background-size: contain;
+                -webkit-font-smoothing: subpixel-antialiased;
+                font-smoothing: subpixel-antialiased;
+            }
+
+            .emscripten {
+                padding: 0;
+                margin: 0;
+                display: block;
+                width: 100%;
+                height: 100%;
+                background-color: #000;
+            }
+
+            canvas.emscripten {
+                border: 0px none;
+                background-color: #000;
+            }
+
+            #main-container {
+                font-size:12px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            }
+        </style>
+    </head>
+
+    <body style="font-family: Georgia, serif;">
+        <script>
+            function init() {
+                var output = document.getElementById('client-info');
+
+                incppect.render = function() {
+                    imgui_ws.gl.clearColor(0.45, 0.55, 0.60, 1.00);
+                    imgui_ws.gl.clear(imgui_ws.gl.COLOR_BUFFER_BIT);
+
+                    imgui_ws.incppect_textures(this);
+                    imgui_ws.incppect_draw_lists(this);
+                    imgui_ws.render();
+                }
+
+                incppect.onerror = function(evt) {
+                    if (typeof evt === 'object') {
+                        output.innerHTML = 'Error: check console for more information';
+                        console.error(evt);
+                    } else {
+                        output.innerHTML = evt;
+                    }
+                }
+
+                incppect.init();
+
+                imgui_ws.set_incppect_handlers(incppect);
+                imgui_ws.init('canvas_main');
+            }
+
+            window.addEventListener('load', init);
+
+        </script>
+
+        <div id=main-container class=emscripten>
+            <canvas id="canvas_main" width="1200px" height="800px" style="background-color: black;" tabindex="0">Your browser does not support the HTML5 canvas tag.</canvas>
+        </div>
+    </body>
+</html>

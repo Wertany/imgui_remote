@@ -1,8 +1,8 @@
-#include <map>
+#include <cmath>
 
-#include "common.h"
-#include "imgui-ws/imgui-ws.h"
 #include "imgui/imgui.h"
+#include "implot.h"
+#include "web_server.hpp"
 
 ImGuiKey toImGuiKey(int32_t keyCode) {
   switch (keyCode) {
@@ -66,8 +66,8 @@ ImGuiKey toImGuiKey(int32_t keyCode) {
     // case 91: return ImGuiKey_LWin;
     // case 92: return ImGuiKey_RWin;
     // case 93: return ImGuiKey_Apps;
-    case 91: return ImGuiKey_ModSuper;
-    case 92: return ImGuiKey_ModSuper;
+    case 91: 
+    case 92:
     case 93: return ImGuiKey_ModSuper;
 
     case 96: return ImGuiKey_Keypad0;
@@ -116,281 +116,59 @@ ImGuiKey toImGuiKey(int32_t keyCode) {
   return ImGuiKey_COUNT;
 }
 
-struct State {
-  State() {}
-
-  bool showDemoWindow = true;
-
-  // client control management
-  struct ClientData {
-    bool hasControl = false;
-
-    std::string ip = "---";
-  };
-
-  // client control
-  float tControl_s = 10.0f;
-  float tControlNext_s = 0.0f;
-
-  int controlIteration = 0;
-  int curIdControl = -1;
-  std::map<int, ClientData> clients;
-
-  struct InputEvent {
-    enum Type {
-      EKey,
-      EMousePos,
-      EMouseButton,
-      EMouseWheel,
-    };
-
-    Type type;
-
-    bool isDown = false;
-
-    ImGuiKey key = ImGuiKey_COUNT;
-    ImGuiMouseButton mouseButton = -1;
-    ImVec2 mousePos;
-    float mouseWheelX = 0.0f;
-    float mouseWheelY = 0.0f;
-  };
-
-  // client input
-  std::vector<InputEvent> inputEvents;
-  std::string lastAddText = "";
-
-  void handle(ImGuiWS::Event &&event);
-  void update();
-};
-
 int main() {
   int port = 5000;
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
+  ImPlot::CreateContext();
   ImGui::GetIO().MouseDrawCursor = true;
 
   ImGui::StyleColorsDark();
   ImGui::GetStyle().AntiAliasedFill = false;
   ImGui::GetStyle().AntiAliasedLines = false;
-  ImGui::GetStyle().WindowRounding = 0.0f;
-  ImGui::GetStyle().ScrollbarRounding = 0.0f;
+  ImGui::GetStyle().WindowRounding = 0.0F;
+  ImGui::GetStyle().ScrollbarRounding = 0.0F;
 
-  // setup imgui-ws
-  ImGuiWS imguiWS;
-  imguiWS.init(port, "../static", {"", "index.html"});
+  auto &server = dc::web_server::WebServer::GetWebServer();
 
-  // prepare font texture
-  {
-    unsigned char *pixels;
-    int width, height;
-    ImGui::GetIO().Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
-    imguiWS.setTexture(0, ImGuiWS::Texture::Type::Alpha8, width, height,
-                       (const char *) pixels);
-  }
-
-  VSync vsync;
-  State state;
+  server.Initialize();
 
   while (true) {
-    // websocket event handling
-    auto events = imguiWS.takeEvents();
-    for (auto &event : events) { state.handle(std::move(event)); }
-    state.update();
-
-    {
-      auto &io = ImGui::GetIO();
-      io.DisplaySize = ImVec2(1200, 800);
-      io.DeltaTime = vsync.delta_s();
-    }
-
     ImGui::NewFrame();
 
-    // render stuff
-    if (state.showDemoWindow) { ImGui::ShowDemoWindow(&state.showDemoWindow); }
+    ImGui::ShowDemoWindow(nullptr);
 
-    // debug window
-    {
-      ImGui::Begin("Hello, world!");
-      ImGui::Checkbox("Demo Window", &state.showDemoWindow);
-      ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                  1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-      ImGui::End();
+    ImGui::Begin("ImPlot", nullptr);
+    static float xs1[1001];
+    static float ys1[1001];
+    for (int i = 0; i < 1001; ++i) {
+      xs1[i] = i * 0.001F;
+      ys1[i] = 0.5F + 0.5F * sinf(50 * (xs1[i] + static_cast<float>(ImGui::GetTime()) / 10));
     }
-
-    // show connected clients
-    ImGui::SetNextWindowPos({10, 10}, ImGuiCond_Always);
-    ImGui::SetNextWindowSize({400, 300}, ImGuiCond_Always);
-    ImGui::Begin(
-        (std::string("WebSocket clients (") + std::to_string(state.clients.size()) + ")")
-            .c_str(),
-        nullptr, ImGuiWindowFlags_NoCollapse);
-    ImGui::Text(" Id   Ip addr");
-    for (auto &[cid, client] : state.clients) {
-      ImGui::Text("%3d : %s", cid, client.ip.c_str());
-      if (client.hasControl) {
-        ImGui::SameLine();
-        ImGui::TextDisabled(" [has control for %4.2f seconds]",
-                            state.tControlNext_s - ImGui::GetTime());
-      }
+    static double xs2[20];
+    static double ys2[20];
+    for (int i = 0; i < 20; ++i) {
+      xs2[i] = i * 1 / 19.0F;
+      ys2[i] = xs2[i] * xs2[i];
+    }
+    if (ImPlot::BeginPlot("Line Plots")) {
+      ImPlot::SetupAxes("x", "y");
+      ImPlot::PlotLine("f(x)", xs1, ys1, 1001);
+      ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+      ImPlot::PlotLine("g(x)", xs2, ys2, 20, ImPlotLineFlags_Segments);
+      ImPlot::EndPlot();
     }
     ImGui::End();
 
-    // generate ImDrawData
+    ImGui::EndFrame();
     ImGui::Render();
 
-    // store ImDrawData for asynchronous dispatching to WS clients
-    imguiWS.setDrawData(ImGui::GetDrawData());
-
-    // if not clients are connected, just sleep to save CPU
-    do { vsync.wait(); } while (imguiWS.nConnected() == 0);
+    server.Tick();
   }
 
+  ImPlot::DestroyContext();
   ImGui::DestroyContext();
 
   return 0;
-}
-
-void State::handle(ImGuiWS::Event &&event) {
-  switch (event.type) {
-    case ImGuiWS::Event::Connected: {
-      clients[event.clientId].ip = event.ip;
-    } break;
-    case ImGuiWS::Event::Disconnected: {
-      clients.erase(event.clientId);
-    } break;
-    case ImGuiWS::Event::MouseMove: {
-      if (event.clientId == curIdControl) {
-        inputEvents.push_back(InputEvent{InputEvent::Type::EMousePos,
-                                         false,
-                                         ImGuiKey_COUNT,
-                                         -1,
-                                         {event.mouse_x, event.mouse_y},
-                                         0.0f,
-                                         0.0f});
-      }
-    } break;
-    case ImGuiWS::Event::MouseDown: {
-      if (event.clientId == curIdControl) {
-        // map the JS button code to Dear ImGui's button code
-        ImGuiMouseButton butImGui = event.mouse_but;
-        switch (event.mouse_but) {
-          case 1: butImGui = ImGuiMouseButton_Middle; break;
-          case 2: butImGui = ImGuiMouseButton_Right; break;
-        }
-
-        inputEvents.push_back(InputEvent{InputEvent::Type::EMouseButton,
-                                         true,
-                                         ImGuiKey_COUNT,
-                                         butImGui,
-                                         {event.mouse_x, event.mouse_y},
-                                         0.0f,
-                                         0.0f});
-      }
-    } break;
-    case ImGuiWS::Event::MouseUp: {
-      if (event.clientId == curIdControl) {
-        // map the JS button code to Dear ImGui's button code
-        ImGuiMouseButton butImGui = event.mouse_but;
-        switch (event.mouse_but) {
-          case 1: butImGui = ImGuiMouseButton_Middle; break;
-          case 2: butImGui = ImGuiMouseButton_Right; break;
-        }
-
-        inputEvents.push_back(InputEvent{InputEvent::Type::EMouseButton,
-                                         false,
-                                         ImGuiKey_COUNT,
-                                         butImGui,
-                                         {event.mouse_x, event.mouse_y},
-                                         0.0f,
-                                         0.0f});
-      }
-    } break;
-    case ImGuiWS::Event::MouseWheel: {
-      if (event.clientId == curIdControl) {
-        inputEvents.push_back(InputEvent{InputEvent::Type::EMouseWheel,
-                                         false,
-                                         ImGuiKey_COUNT,
-                                         -1,
-                                         {},
-                                         event.wheel_x,
-                                         event.wheel_y});
-      }
-    } break;
-    case ImGuiWS::Event::KeyUp: {
-      if (event.clientId == curIdControl) {
-        if (event.key > 0) {
-          ImGuiKey keyImGui = ::toImGuiKey(event.key);
-          inputEvents.push_back(
-              InputEvent{InputEvent::Type::EKey, false, keyImGui, -1, {}, 0.0f, 0.0f});
-        }
-      }
-    } break;
-    case ImGuiWS::Event::KeyDown: {
-      if (event.clientId == curIdControl) {
-        if (event.key > 0) {
-          ImGuiKey keyImGui = ::toImGuiKey(event.key);
-          inputEvents.push_back(
-              InputEvent{InputEvent::Type::EKey, true, keyImGui, -1, {}, 0.0f, 0.0f});
-        }
-      }
-    } break;
-    case ImGuiWS::Event::KeyPress: {
-      if (event.clientId == curIdControl) {
-        lastAddText.resize(1);
-        lastAddText[0] = event.key;
-      }
-    } break;
-    default: {
-      printf("Unknown input event\n");
-    }
-  }
-}
-
-void State::update() {
-  if (clients.size() > 0
-      && (clients.find(curIdControl) == clients.end()
-          || ImGui::GetTime() > tControlNext_s)) {
-    if (clients.find(curIdControl) != clients.end()) {
-      clients[curIdControl].hasControl = false;
-    }
-    int k = ++controlIteration % clients.size();
-    auto client = clients.begin();
-    std::advance(client, k);
-    client->second.hasControl = true;
-    curIdControl = client->first;
-    tControlNext_s = ImGui::GetTime() + tControl_s;
-    ImGui::GetIO().ClearInputKeys();
-  }
-
-  if (clients.size() == 0) { curIdControl = -1; }
-
-  if (curIdControl > 0) {
-    {
-      auto &io = ImGui::GetIO();
-
-      if (lastAddText.size() > 0) { io.AddInputCharactersUTF8(lastAddText.c_str()); }
-
-      for (const auto &event : inputEvents) {
-        switch (event.type) {
-          case InputEvent::Type::EKey: {
-            io.AddKeyEvent(event.key, event.isDown);
-          } break;
-          case InputEvent::Type::EMousePos: {
-            io.AddMousePosEvent(event.mousePos.x, event.mousePos.y);
-          } break;
-          case InputEvent::Type::EMouseButton: {
-            io.AddMouseButtonEvent(event.mouseButton, event.isDown);
-            io.AddMousePosEvent(event.mousePos.x, event.mousePos.y);
-          } break;
-          case InputEvent::Type::EMouseWheel: {
-            io.AddMouseWheelEvent(event.mouseWheelX, event.mouseWheelY);
-          } break;
-        };
-      }
-    }
-
-    inputEvents.clear();
-    lastAddText = "";
-  }
 }

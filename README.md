@@ -16,5 +16,5 @@ cd build
 cmake ..  
 make  
 
-Запуск:
-Из папки build выполняем команду: ./src/imgui_remote `<port>`
+Запуск:  
+Из папки build выполняем команду ./src/imgui_remote `<port>`

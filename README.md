@@ -7,14 +7,14 @@
 
 ## Сборка проекта
 
-Для начала необходимо инициализировать подмодули:
+Для начала необходимо инициализировать подмодули:  
 git submodule update --init --recursive
 
 Далее собираем с помощью команд:
-mkdir build
-cd build
-cmake ..
-make
+mkdir build  
+cd build  
+cmake ..  
+make  
 
 Запуск:
 Из папки build выполняем команду: ./src/imgui_remote `<port>`
